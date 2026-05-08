@@ -14,17 +14,17 @@ import (
 func main() {
 	fmt.Println("Starting Peril server...")
 	connectionString := "amqp://guest:guest@localhost:5672/"
-	connestion, err := amqp.Dial(connectionString)
+	connection, err := amqp.Dial(connectionString)
 	if err != nil {
 		log.Fatal("Error connecting to rabbitmq")
 	}
-	defer connestion.Close()
+	defer connection.Close()
 
 	fmt.Println("Connection successful")
 
-	channel, err := connestion.Channel()
+	channel, err := connection.Channel()
 	if err != nil {
-		log.Fatal("Error creating channel")
+		log.Fatalf("Error creating channel: %v", err)
 	}
 
 	err = pubsub.PublishJSON(channel, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: true})
