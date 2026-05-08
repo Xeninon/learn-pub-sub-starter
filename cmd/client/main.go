@@ -3,12 +3,10 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 
-	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
-	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
-	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
+	"github.com/bootdotdev/Peril/internal/gamelogic"
+	"github.com/bootdotdev/Peril/internal/pubsub"
+	"github.com/bootdotdev/Peril/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -39,9 +37,43 @@ func main() {
 		log.Fatalf("Error making queue: %v", err)
 	}
 
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
-	<-signalChan
+	gamestate := gamelogic.NewGameState(username)
 
-	fmt.Println("Shutting down")
+	for {
+		input := gamelogic.GetInput()
+		if len(input) == 0 {
+			continue
+		}
+
+		quit := false
+		switch input[0] {
+		case "spawn":
+			err = gamestate.CommandSpawn(input)
+			if err != nil {
+				fmt.Println(err)
+			}
+		case "move":
+			_, err := gamestate.CommandMove(input)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			fmt.Println("move successful")
+		case "status":
+			gamestate.CommandStatus()
+		case "help":
+			gamelogic.PrintClientHelp()
+		case "spam":
+			fmt.Println("Spamming not allowed yet!")
+		case "quit":
+			gamelogic.PrintQuit()
+			quit = true
+		default:
+			fmt.Println("Unknown command")
+		}
+		if quit {
+			break
+		}
+	}
 }

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
-	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
-	"github.com/bootdotdev/learn-pub-sub-starter/internal/routing"
+	"github.com/bootdotdev/Peril/internal/gamelogic"
+	"github.com/bootdotdev/Peril/internal/pubsub"
+	"github.com/bootdotdev/Peril/internal/routing"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -42,7 +42,7 @@ func main() {
 				log.Fatalf("Error publishing json: %v", err)
 			}
 		case "resume":
-			fmt.Println("Sending pause message")
+			fmt.Println("Sending resume message")
 			err = pubsub.PublishJSON(channel, routing.ExchangePerilDirect, routing.PauseKey, routing.PlayingState{IsPaused: false})
 			if err != nil {
 				log.Fatalf("Error publishing json: %v", err)
