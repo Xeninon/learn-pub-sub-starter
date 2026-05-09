@@ -26,18 +26,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	_, _, err = pubsub.DeclareAndBind(
+	gamestate := gamelogic.NewGameState(username)
+
+	err = pubsub.SubscribeJSON(
 		connection,
 		routing.ExchangePerilDirect,
 		routing.PauseKey+"."+username,
 		routing.PauseKey,
 		pubsub.Transient,
+		handlerPause(gamestate),
 	)
 	if err != nil {
-		log.Fatalf("Error making queue: %v", err)
+		log.Fatalf("Error subscribing to queue: %v", err)
 	}
-
-	gamestate := gamelogic.NewGameState(username)
 
 	for {
 		input := gamelogic.GetInput()
@@ -75,5 +76,12 @@ func main() {
 		if quit {
 			break
 		}
+	}
+}
+
+func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
+	return func(ps routing.PlayingState) {
+		defer fmt.Print("> ")
+		gs.HandlePause(ps)
 	}
 }
