@@ -4,15 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-type SimpleQueueType string
+type SimpleQueueType int
 
 const (
-	Durable   SimpleQueueType = "durable"
-	Transient SimpleQueueType = "transient"
+	Durable SimpleQueueType = iota
+	Transient
+)
+
+type AckType int
+
+const (
+	Ack AckType = iota
+	NackRequeue
+	NackDiscard
 )
 
 func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
@@ -35,7 +44,7 @@ func SubscribeJSON[T any](
 	queueName,
 	key string,
 	queueType SimpleQueueType,
-	handler func(T),
+	handler func(T) AckType,
 ) error {
 	channel, queue, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
@@ -54,10 +63,24 @@ func SubscribeJSON[T any](
 				fmt.Printf("could not unmarshal message: %v\n", err)
 			}
 
-			handler(payload)
-			if err = delivery.Ack(false); err != nil {
-				fmt.Printf("could not ack message: %v\n", err)
+			switch handler(payload) {
+			case Ack:
+				if err = delivery.Ack(false); err != nil {
+					fmt.Printf("could not ack message: %v\n", err)
+				}
+				log.Println("Ack")
+			case NackRequeue:
+				if err = delivery.Nack(false, true); err != nil {
+					fmt.Printf("could not Nack message: %v\n", err)
+				}
+				log.Println("NackR")
+			case NackDiscard:
+				if err = delivery.Nack(false, false); err != nil {
+					fmt.Printf("could not Nack message: %v\n", err)
+				}
+				log.Println("NackD")
 			}
+
 		}
 	}()
 
@@ -76,12 +99,14 @@ func DeclareAndBind(
 		return nil, amqp.Queue{}, err
 	}
 
-	queue, err := channel.QueueDeclare(queueName, queueType == Durable, queueType == Transient, queueType == Transient, false, nil)
+	properties := amqp.NewConnectionProperties()
+	properties["x-dead-letter-exchange"] = "peril_dlx"
+	queue, err := channel.QueueDeclare(queueName, queueType == Durable, queueType == Transient, queueType == Transient, false, properties)
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
 
-	err = channel.QueueBind(queueName, key, exchange, false, nil)
+	err = channel.QueueBind(queue.Name, key, exchange, false, nil)
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
