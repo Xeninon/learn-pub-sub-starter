@@ -21,6 +21,11 @@ func main() {
 
 	fmt.Println("Connection successful")
 
+	channel, err := connection.Channel()
+	if err != nil {
+		log.Fatalf("Error creating channel: %v", err)
+	}
+
 	username, err := gamelogic.ClientWelcome()
 	if err != nil {
 		log.Fatal(err)
@@ -40,6 +45,19 @@ func main() {
 		log.Fatalf("Error subscribing to queue: %v", err)
 	}
 
+	err = pubsub.SubscribeJSON(
+		connection,
+		routing.ExchangePerilTopic,
+		routing.ArmyMovesPrefix+"."+username,
+		routing.ArmyMovesPrefix+".*",
+		pubsub.Transient,
+		handlerMove(gamestate),
+	)
+
+	if err != nil {
+		log.Fatalf("Error subscribing to queue: %v", err)
+	}
+
 	for {
 		input := gamelogic.GetInput()
 		if len(input) == 0 {
@@ -54,10 +72,20 @@ func main() {
 				fmt.Println(err)
 			}
 		case "move":
-			_, err := gamestate.CommandMove(input)
+			armyMove, err := gamestate.CommandMove(input)
 			if err != nil {
 				fmt.Println(err)
 				continue
+			}
+
+			err = pubsub.PublishJSON(
+				channel,
+				routing.ExchangePerilTopic,
+				routing.ArmyMovesPrefix+"."+username,
+				armyMove,
+			)
+			if err != nil {
+				fmt.Println(err)
 			}
 
 			fmt.Println("move successful")
@@ -83,5 +111,12 @@ func handlerPause(gs *gamelogic.GameState) func(routing.PlayingState) {
 	return func(ps routing.PlayingState) {
 		defer fmt.Print("> ")
 		gs.HandlePause(ps)
+	}
+}
+
+func handlerMove(gs *gamelogic.GameState) func(gamelogic.ArmyMove) {
+	return func(am gamelogic.ArmyMove) {
+		defer fmt.Print("> ")
+		gs.HandleMove(am)
 	}
 }

@@ -37,12 +37,12 @@ func SubscribeJSON[T any](
 	queueType SimpleQueueType,
 	handler func(T),
 ) error {
-	channel, _, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
+	channel, queue, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
 	if err != nil {
 		return err
 	}
 
-	deliveryChan, err := channel.Consume(queueName, "", false, false, false, false, nil)
+	deliveryChan, err := channel.Consume(queue.Name, "", false, false, false, false, nil)
 	if err != nil {
 		return err
 	}
