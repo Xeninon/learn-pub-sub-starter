@@ -1,10 +1,11 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -24,6 +25,22 @@ const (
 	NackDiscard
 )
 
+func PublishGOB[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	var buffer bytes.Buffer
+	encoder := gob.NewEncoder(&buffer)
+	err := encoder.Encode(val)
+	if err != nil {
+		return err
+	}
+
+	err = ch.PublishWithContext(context.Background(), exchange, key, false, false, amqp.Publishing{ContentType: "application/gob", Body: buffer.Bytes()})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	data, err := json.Marshal(val)
 	if err != nil {
@@ -34,6 +51,55 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func SubscribeGob[T any](
+	conn *amqp.Connection,
+	exchange,
+	queueName,
+	key string,
+	queueType SimpleQueueType,
+	handler func(T) AckType,
+) error {
+	channel, queue, err := DeclareAndBind(conn, exchange, queueName, key, queueType)
+	if err != nil {
+		return err
+	}
+
+	deliveryChan, err := channel.Consume(queue.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for delivery := range deliveryChan {
+			buffer := bytes.NewBuffer(delivery.Body)
+			decoder := gob.NewDecoder(buffer)
+			var payload T
+			err := decoder.Decode(&payload)
+			if err != nil {
+				fmt.Printf("could not unmarshal message: %v\n", err)
+			}
+
+			switch handler(payload) {
+			case Ack:
+				if err = delivery.Ack(false); err != nil {
+					fmt.Printf("could not ack message: %v\n", err)
+				}
+			case NackRequeue:
+				if err = delivery.Nack(false, true); err != nil {
+					fmt.Printf("could not Nack message: %v\n", err)
+				}
+			case NackDiscard:
+				if err = delivery.Nack(false, false); err != nil {
+					fmt.Printf("could not Nack message: %v\n", err)
+				}
+			}
+
+		}
+	}()
 
 	return nil
 }
@@ -68,17 +134,14 @@ func SubscribeJSON[T any](
 				if err = delivery.Ack(false); err != nil {
 					fmt.Printf("could not ack message: %v\n", err)
 				}
-				log.Println("Ack")
 			case NackRequeue:
 				if err = delivery.Nack(false, true); err != nil {
 					fmt.Printf("could not Nack message: %v\n", err)
 				}
-				log.Println("NackR")
 			case NackDiscard:
 				if err = delivery.Nack(false, false); err != nil {
 					fmt.Printf("could not Nack message: %v\n", err)
 				}
-				log.Println("NackD")
 			}
 
 		}

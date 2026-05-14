@@ -26,15 +26,16 @@ func main() {
 		log.Fatalf("Error creating channel: %v", err)
 	}
 
-	_, _, err = pubsub.DeclareAndBind(
+	err = pubsub.SubscribeGob(
 		connection,
 		routing.ExchangePerilTopic,
 		routing.GameLogSlug,
 		routing.GameLogSlug+".*",
 		pubsub.Durable,
+		handlerLog(),
 	)
 	if err != nil {
-		log.Fatalf("Error making queue: %v", err)
+		log.Fatalf("Error subscribing to log queue: %v", err)
 	}
 
 	gamelogic.PrintServerHelp()
@@ -67,5 +68,16 @@ func main() {
 		if quit {
 			break
 		}
+	}
+}
+
+func handlerLog() func(routing.GameLog) pubsub.AckType {
+	return func(gl routing.GameLog) pubsub.AckType {
+		defer fmt.Print("> ")
+		err := gamelogic.WriteLog(gl)
+		if err != nil {
+			return pubsub.NackRequeue
+		}
+		return pubsub.Ack
 	}
 }
